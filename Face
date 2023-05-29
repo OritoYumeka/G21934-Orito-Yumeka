@@ -1,0 +1,205 @@
+from PIL import Image, ImageDraw, ImageFont
+import math
+
+class Component:
+  def __init__(self,skincolor):
+    self.feature = "顔のパーツの元になるクラス"
+    self.skincolor = skincolor
+  
+  def draw(self,image):
+    pass # 親クラスでは何もしない
+  def easy_bezier(self,start,end,d):
+    h = end[0] - start[0]
+    v = end[1] - start[1]
+    cx = start[0] + (h / 2)
+    cy = start[1] + (v / 2)
+    if v == 0:
+        return [start,(cx,cy + d),end]
+    else:
+        rad = math.atan(h/v) + (math.pi / 2) + (math.pi if (h < 0 and v >= 0) or (h >= 0 and v >= 0) else 0)
+        dx = d * math.sin(rad)
+        dy = d * math.cos(rad)
+        return [start,((cx + dx),(cy + dy)),end]
+  def make_bezier(self,xys):
+    # xys should be a sequence of 2-tuples (Bezier control points)
+    n = len(xys)
+    combinations = self.pascal_row(n-1)
+    def bezier(ts):
+        # This uses the generalized formula for bezier curves
+        # http://en.wikipedia.org/wiki/B%C3%A9zier_curve#Generalization
+        result = []
+        for t in ts:
+            tpowers = (t**i for i in range(n))
+            upowers = reversed([(1-t)**i for i in range(n)])
+            coefs = [c*a*b for c, a, b in zip(combinations, tpowers, upowers)]
+            result.append(
+                tuple(sum([coef*p for coef, p in zip(coefs, ps)]) for ps in zip(*xys)))
+        return result
+    return bezier
+
+  def pascal_row(self, n, memo={}):
+      # This returns the nth row of Pascal's Triangle
+      if n in memo:
+          return memo[n]
+      result = [1]
+      x, numerator = 1, n
+      for denominator in range(1, n//2+1):
+          # print(numerator,denominator,x)
+          x *= numerator
+          x /= denominator
+          result.append(x)
+          numerator -= 1
+      if n&1 == 0:
+          # n is even
+          result.extend(reversed(result[:-1]))
+      else:
+          result.extend(reversed(result))
+      memo[n] = result
+      return result
+ 
+
+class Face(Component):
+  def __init__(self,skincolor):
+    super().__init__(skincolor)
+    self.feature = "ベーシックな顔の輪郭"
+
+  def draw(self,canvas):
+    canvas.ellipse(
+      [(80, 50), (320, 350)],  # 左上のxy座標、右下のXY座標
+      fill=self.skincolor            # 塗りの色
+    )
+
+class Eyes(Component):
+  def __init__(self,skincolor):
+    super().__init__(skincolor)
+    self.feature = "つぶらな瞳"
+
+  def draw(self,canvas):
+    x = 160
+    y = 180
+    r = 10
+    canvas.ellipse(
+      [(x-r, y-r), (x+r, y+r)],  # 左上のxy座標、右下のXY座標
+      fill=(0,0,0)            # 塗りの色
+    )
+    x = 400 - x
+    canvas.ellipse(
+      [(x-r, y-r), (x+r, y+r)],  # 左上のxy座標、右下のXY座標
+      fill=(0,0,0)            # 塗りの色
+    )
+
+class Mouth32(Component):
+  def __init__(self,skincolor):
+    super().__init__(skincolor)
+    self.feature = "スマイル!"
+
+  def draw(self,canvas):
+    canvas.arc(
+      [(150,150),(250,300)],
+      start=45,
+      end=135,
+      fill=(194, 24, 91),
+      width=3
+    )
+
+class Nose32(Component):
+  def __init__(self,skincolor):
+    super().__init__(skincolor)
+    self.feature = "シンプルな鼻"
+
+  def draw(self,canvas):
+    x = 200
+    y = 220
+    canvas.line(
+      [(x+5, y-10), (x-5, y),(x+5, y+10)],
+      fill=(0,0,0), 
+      width=2
+    )
+
+class Ears(Component):
+  def __init__(self,skincolor):
+    super().__init__(skincolor)
+    self.feature = "耳はパス！"
+
+  def draw(self,canvas):
+    pass
+
+class Hair(Component):
+  def __init__(self,skincolor):
+    super().__init__(skincolor)
+    self.feature = "髪の毛"
+
+  def mirrer(self,xy):
+    # 中央垂直軸に対するミラー座礁を得る
+    return (400 - xy[0] , xy[1])
+
+  def draw(self,canvas):
+      points = [(200, 160),(100, 160),(100, 300),(60,180),(100,90),(200,40)]
+      points.append(self.mirrer(points[4]))
+      points.append(self.mirrer(points[3]))
+      points.append(self.mirrer(points[2]))
+      points.append(self.mirrer(points[1]))
+      canvas.polygon(
+        points,  # 左上のxy座標、右下のXY座標
+        fill=(0,0,0),
+        outline=(0,0,0)
+      )
+class SmoothHair(Hair):
+  def __init__(self,skincolor):
+    super().__init__(skincolor)
+    self.feature = "髪の毛"
+
+  def draw(self,canvas):
+      points = [(200, 160),(100, 160),(100, 300),(60,180),(100,90),(200,40)]
+      points.append(self.mirrer(points[4])) # [6]
+      points.append(self.mirrer(points[3])) # [7]
+      points.append(self.mirrer(points[2])) # [8]
+      points.append(self.mirrer(points[1])) # [9]
+      points.append(self.mirrer(points[0])) # [10]
+      ts = [t/100.0 for t in range(101)]
+      hair = []
+      bend = [10,20,-50,-50,-50,-50,-50,-50,20,10]
+      for i in range(len(points)-1):
+        xys = self.easy_bezier(points[i],points[i+1],bend[i])
+        bezier = self.make_bezier(xys)
+        hair.extend(bezier(ts))
+      canvas.polygon(
+        hair,  # 左上のxy座標、右下のXY座標
+        fill=(0,0,0),
+        outline=(0,0,0)
+      )
+
+def setComponent(component):
+  image = Image.new("RGBA", (400, 400), (236, 239, 241))
+  canvas = ImageDraw.Draw(image)
+  skincolor=(250, 250, 200)
+  face = Face(skincolor)
+  face.draw(canvas)
+  eyes = Eyes(skincolor)
+  eyes.draw(canvas)
+  mouth = Mouth32(skincolor)
+  mouth.draw(canvas)
+  nose = Nose32(skincolor)
+  nose.draw(canvas)
+  hair = SmoothHair(skincolor)
+  hair.draw(canvas)
+  image.show() 
+drawAvator()
+
+class Avator:
+  def __init__(self,givenName,familyName,fuclty,department):
+    self.givenName=givenName
+    self.familyName=familyName
+    self.fuclty=fuclty
+    self.department=department
+
+  @property
+  def getName(self):
+        return self.familyName +self.givenName
+
+  @property
+  def getAffiliation(self):
+        return self.department +' '+self.fuclty
+
+my_homework=Avator('夢華','織戸','情報科学科','学芸学部')
+print(my_homework.getName+' '+my_homework.getAffiliation)
