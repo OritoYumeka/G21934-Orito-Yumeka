@@ -22,7 +22,7 @@ pondHeight = 800
 init: () -> (Model, Cmd Msg)
 init _ =
     (Model [] 0(Ami(Vec2D 500 500))
-    , Random.generate KingyoGenerated (Random.list 2 randomKingyo) )
+    , Random.generate KingyoGenerated (Random.list 10 randomKingyo) )
 
 
 randomKingyo: Random.Generator Kingyo
@@ -93,7 +93,13 @@ view model =
                 ,fillOpacity "0.5"]
                 []
          ,amiView model.ami
-         ]++ (List.map kingyoView model.kingyos)
+         ]++ (List.indexedMap (\i k -> if (modBy 4 i)==0 then
+                                            kingyoView k
+                                        else if(modBy 4 i)==1 then
+                                           namazuView k
+                                        else if(modBy 4 i)==2 then 
+                                           kaniView k
+                                           else kameView k)  model.kingyos)
         )
 
 subscriptions: Model -> Sub Msg
